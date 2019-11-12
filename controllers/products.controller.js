@@ -1,4 +1,5 @@
 const ProductRef = require("../models/product.model");
+const { log } = require("../middleware/logger");
 
 exports.optionsProducts = function(req, res) {
     res.header("allow", "OPTIONS, GET, POST");  
@@ -14,11 +15,15 @@ exports.getAllProducts = function(req, res) {
     });
 };
 
-exports.getSingleProduct = function(req, res) {
-    ProductRef.where("sku", "==", req.params.sku).get()
-    .then(docs => {
-        docs.forEach(doc => res.json(doc.data()))
-    });
+
+exports.getSingleProduct = async function(req, res) {
+    try {
+    const docs = await ProductRef.where("sku", "==", req.params.sku).limit(1).get();
+        docs.forEach(doc => res.json(doc.data()));
+        
+    } catch (error) {
+        catchError(error);
+    }
 };
 
 exports.putProduct = function(req, res) {
@@ -31,27 +36,42 @@ exports.putProduct = function(req, res) {
     .catch(error => res.json(error));
 };
 
-exports.deleteProduct = function(req, res) {
-    ProductRef.where("sku", "==", req.params.sku).get()
-    .then(docs => {
+exports.deleteProduct = async function(req, res) {
+
+    try {
+        const docs = ProductRef.where("sku", "==", req.params.sku).get()
         docs.forEach(doc => doc.ref.delete());
-    })
-    .catch(error => res.status(500).json({message: error}));
-    res.status(204).end();
+        res.status(204).end();
+    } catch(error) {
+        catchError(error);
+    }
 };
 
-exports.updateProduct =  function(req, res) {
+exports.updateProduct = async function(req, res) {
     if (Req.fields.price){
     Req.fields.price = parseFloat(Req.fields.price);
     }
     if(Req.fields.weight){
     Req.fields.weight = parseFloat(Req.fields.weight);
     }
-
-    ProductRef.where("sku", "==", req.params.sku).get()
-    .then(docs => {
-        docs.forEach(doc => doc.ref.update( { ...req.fields }).get()
-            .then(doc => res.json(doc.data()))
-        );
-    })
+    try {
+        const docs = await ProductRef.where("sku", "==", req.params.sku).limit(1).get()
+        docs.forEach(async doc => {
+            try {
+                doc.ref.update({ ...req.fields });
+                const result = await doc.ref.get();
+                res.json(result.data());
+            } catch(error){
+            catchError(error);
+            }
+        });
+    } catch(error) {
+        catchError(error);
+    }
 };
+
+
+function catchError (error) {
+    log.error(error.stack);
+    res.status(500).end();
+}
